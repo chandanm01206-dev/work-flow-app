@@ -25,9 +25,9 @@ env_path = ROOT_DIR / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+mongo_url = os.environ.get("MONGO_URL", "")
+client = AsyncIOMotorClient(mongo_url) if mongo_url else None
+db = client[os.environ.get("DB_NAME", "freelance_os")] if client else None
 
 app = FastAPI(title="Freelance OS API")
 api_router = APIRouter(prefix="/api")
