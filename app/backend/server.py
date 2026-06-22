@@ -21,7 +21,9 @@ from pydantic import BaseModel, Field
 
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env")
+env_path = ROOT_DIR / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
