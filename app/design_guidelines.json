@@ -1,0 +1,149 @@
+{
+    "app_name": "Freelance OS",
+    "personality": "7 Dark-First Utility DARK",
+    "personality_one_liner": "A high-performance command center built for speed, tracking, and operational focus without visual fluff.",
+    "color": {
+        "surface": "#101010",
+        "onSurface": "#F0F0F0",
+        "surfaceSecondary": "#1A1A1A",
+        "onSurfaceSecondary": "#9E9E9E",
+        "surfaceTertiary": "#262626",
+        "onSurfaceTertiary": "#E0E0E0",
+        "surfaceInverse": "#F5F5F5",
+        "onSurfaceInverse": "#101010",
+        "brand": "#FF5722",
+        "brandPrimary": "#FF5722",
+        "onBrandPrimary": "#FFFFFF",
+        "brandSecondary": "#E64A19",
+        "onBrandSecondary": "#FFFFFF",
+        "brandTertiary": "rgba(255, 87, 34, 0.15)",
+        "onBrandTertiary": "#FF6E40",
+        "success": "#00E676",
+        "onSuccess": "#000000",
+        "warning": "#FFEA00",
+        "onWarning": "#000000",
+        "error": "#FF3D00",
+        "onError": "#FFFFFF",
+        "border": "#2A2A2A",
+        "borderStrong": "#404040",
+        "divider": "#1F1F1F"
+    },
+    "typography": {
+        "displayFontFamily": "Barlow Condensed",
+        "textFontFamily": "IBM Plex Sans",
+        "scale": {
+            "sm": 12,
+            "base": 14,
+            "lg": 16,
+            "xl": 20,
+            "2xl": 24
+        }
+    },
+    "spacing": {
+        "rule": "Dense and utilitarian. Use dividers and tonal backgrounds to separate information, not massive whitespace. Padding should be tight but touch targets must remain 44pt+.",
+        "xs": 4,
+        "sm": 8,
+        "md": 12,
+        "lg": 16,
+        "xl": 24,
+        "2xl": 32,
+        "3xl": 48
+    },
+    "radius_tokens": {
+        "sm": 4,
+        "md": 8,
+        "lg": 12,
+        "pill": 999
+    },
+    "shadow_tier": 0,
+    "navigation": "bottom_tabs",
+    "icon_set": "Phosphor",
+    "glassmorphism": {
+        "enabled": false,
+        "do's": [],
+        "dont's": [
+            "No blur or glassmorphism. Use solid surfaceSecondary or border lines to establish hierarchy, keeping it feeling like a fast mechanical tool."
+        ]
+    },
+    "platform_libraries": {
+        "glass": {
+            "ios": "solid surfaceSecondary",
+            "android": "solid surfaceSecondary",
+            "low_end_android_fallback": "solid surfaceSecondary"
+        },
+        "image": "expo-image",
+        "blur": "expo-blur",
+        "bottom_sheet": "@gorhom/bottom-sheet",
+        "animation": "react-native-reanimated",
+        "gesture": "react-native-gesture-handler"
+    },
+    "screens": [
+        {
+            "name": "Dashboard",
+            "purpose": "High-level command center showing today's intention, schedule timeline, priority tasks, and habit checklist.",
+            "states": {
+                "loading": "Centered minimalist spinner in brand color.",
+                "empty": "Should never be completely empty. Show prompt to set daily intention.",
+                "error": "Text-based error alert inline."
+            },
+            "layout": "Vertical scroll. Top: Large 'Daily Focus' text input area. Below it: 3-column metric row or single horizontal scroll of 'Upcoming Deliveries'. Next section: 'Today's Schedule' vertical timeline (compact). Next section: 'Today's Habits' list of checkboxes. Bottom: 'Priority Tasks' (overdue items flagged with error text color)."
+        },
+        {
+            "name": "Tasks",
+            "purpose": "A ruthless, fast task manager with a sticky quick-add bar.",
+            "states": {
+                "loading": "Centered spinner.",
+                "empty": "Minimal architectural image with 'No active tasks. Add one below.'",
+                "error": "Inline retry button."
+            },
+            "layout": "Top: Segmented controls for Views (Today, This Week, All). List: dense rows (title, due date badge, priority icon). Swipe-right to complete, swipe-left to delete. Bottom: Sticky quick-add text input bar anchored above the tab bar."
+        },
+        {
+            "name": "Schedule (Clients & Projects)",
+            "purpose": "Combined view for calendar schedule and client projects.",
+            "states": {
+                "loading": "Centered spinner.",
+                "empty": "Empty state illustration with CTA to add client.",
+                "error": "Inline error."
+            },
+            "layout": "Two tabs at top (Schedule | Clients). Schedule view: Vertical continuous timeline stream of the week. Clients view: Expandable accordion cards per client showing linked projects and deliveries."
+        },
+        {
+            "name": "Habits",
+            "purpose": "A GitHub-style heatmap grid to track daily fixed habits neutrally.",
+            "states": {
+                "loading": "Centered spinner.",
+                "empty": "List of 5 empty habit slots.",
+                "error": "Inline retry."
+            },
+            "layout": "Top: Current streak counter and weekly completion rate. Main: Matrix grid. Rows are habit names, columns are the last 7 to 14 days (squares). Today's column is highlighted. Tapping a square toggles it. Completed = brandPrimary fill, Missed/Empty = surfaceTertiary fill (NEUTRAL, no red). Bottom: List to manage the 5-7 fixed habits."
+        }
+    ],
+    "images": {
+        "dashboard_hero_bg": {
+            "url": "https://images.unsplash.com/photo-1526289034009-0240ddb68ce3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwxfHxkYXJrJTIwYWJzdHJhY3QlMjB0ZXh0dXJlJTIwbWluaW1hbHxlbnwwfHx8YmxhY2t8MTc4MjE0NjAzMnww&ixlib=rb-4.1.0&q=85",
+            "alt": "Dark minimalist architectural texture for dashboard top banner"
+        },
+        "empty_state_tasks": {
+            "url": "https://images.pexels.com/photos/3334452/pexels-photo-3334452.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+            "alt": "Minimalist black and white architectural shadow play for empty state"
+        }
+    },
+    "instructions_to_main_agent": [
+        "Strictly follow the Dark-First Utility guidelines. No light mode toggle; the app is permanently in Dark Mode as requested.",
+        "For the Habit Tracker, create a GitHub-style heatmap using square grid cells. Empty cells MUST be neutral (surfaceTertiary) with no red/punishment colors. Checked cells use brandPrimary.",
+        "Tasks MUST flag overdue items in the 'error' color (#FF3D00).",
+        "Ensure the task quick-add bar is always sticky at the bottom, directly above the navigation bar, allowing task addition in under 10 seconds.",
+        "Use 'Barlow Condensed' for numbers, metrics, and section headers to give it that command-center/dashboard feel, while 'IBM Plex Sans' should be used for readable task titles.",
+        "Implement zero-glassmorphism. Use strict borders (border, borderStrong) and solid backgrounds (surfaceSecondary) to define containers.",
+        "Include a 'Daily Focus' single-line text field prominently at the top of the Dashboard.",
+        "Ensure swipe gestures (react-native-gesture-handler) are used for quick task completion.",
+        "Haptics: Provide sharp tactile feedback on task completion and habit check-offs, do not over-use on scroll."
+    ],
+    "haptics": {
+        "task_complete": "success",
+        "habit_check": "light",
+        "quick_add_submit": "medium",
+        "tab_switch": "selection"
+    }
+}
