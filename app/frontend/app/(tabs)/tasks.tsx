@@ -12,6 +12,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    TouchableOpacity,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +21,110 @@ import { api } from "@/src/api/client";
 import { CATEGORIES, colors, fontFamily, fontSize, PRIORITIES, radius, spacing } from "@/src/theme";
 import type { Task, TaskCategory, TaskPriority } from "@/src/types";
 import { endOfDay, formatDateTime, isOverdue, startOfDay } from "@/src/utils/date";
+
+// ─── Date Picker ──────────────────────────────────────────────
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function DatePickerModal({ visible, value, onConfirm, onCancel }: {
+    visible: boolean; value: string;
+    onConfirm: (iso: string) => void; onCancel: () => void;
+}) {
+    const initial = value ? new Date(value) : new Date();
+    const [viewYear, setViewYear] = useState(initial.getFullYear());
+    const [viewMonth, setViewMonth] = useState(initial.getMonth());
+    const [selDay, setSelDay] = useState<number | null>(value ? initial.getDate() : null);
+    const [hour, setHour] = useState(initial.getHours());
+    const [minute, setMinute] = useState(Math.round(initial.getMinutes() / 15) * 15 % 60);
+
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+    const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); };
+    const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
+    const confirm = () => { if (!selDay) return; onConfirm(new Date(viewYear, viewMonth, selDay, hour, minute).toISOString()); };
+    const today = new Date();
+    const isToday = (d: number) => d === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();
+
+    return (
+        <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+            <Pressable style={dpS.overlay} onPress={onCancel} />
+            <View style={dpS.card}>
+                <View style={dpS.navRow}>
+                    <TouchableOpacity onPress={prevMonth} style={dpS.navBtn}><Feather name="chevron-left" size={18} color="#F0F0F0" /></TouchableOpacity>
+                    <Text style={dpS.monthTitle}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
+                    <TouchableOpacity onPress={nextMonth} style={dpS.navBtn}><Feather name="chevron-right" size={18} color="#F0F0F0" /></TouchableOpacity>
+                </View>
+                <View style={dpS.dayHeaderRow}>{DAY_NAMES.map(d => <Text key={d} style={dpS.dayHeader}>{d}</Text>)}</View>
+                <View style={dpS.grid}>
+                    {cells.map((day, i) => {
+                        const sel = day === selDay;
+                        const tod = day !== null && isToday(day);
+                        return (
+                            <TouchableOpacity key={i} style={[dpS.cell, sel && dpS.cellSel, tod && !sel && dpS.cellToday]} onPress={() => day !== null && setSelDay(day)} disabled={day === null}>
+                                <Text style={[dpS.cellTxt, sel && dpS.cellTxtSel, tod && !sel && dpS.cellTxtToday]}>{day ?? ""}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+                <View style={dpS.timeRow}>
+                    <Feather name="clock" size={14} color="#9E9E9E" />
+                    <Text style={dpS.timeLabel}>Time</Text>
+                    <TouchableOpacity onPress={() => setHour(h => (h + 23) % 24)} style={dpS.timeBtn}><Feather name="chevron-left" size={14} color="#F0F0F0" /></TouchableOpacity>
+                    <Text style={dpS.timeVal}>{String(hour).padStart(2, "0")}</Text>
+                    <TouchableOpacity onPress={() => setHour(h => (h + 1) % 24)} style={dpS.timeBtn}><Feather name="chevron-right" size={14} color="#F0F0F0" /></TouchableOpacity>
+                    <Text style={dpS.timeSep}>:</Text>
+                    <TouchableOpacity onPress={() => setMinute(m => (m + 45) % 60)} style={dpS.timeBtn}><Feather name="chevron-left" size={14} color="#F0F0F0" /></TouchableOpacity>
+                    <Text style={dpS.timeVal}>{String(minute).padStart(2, "0")}</Text>
+                    <TouchableOpacity onPress={() => setMinute(m => (m + 15) % 60)} style={dpS.timeBtn}><Feather name="chevron-right" size={14} color="#F0F0F0" /></TouchableOpacity>
+                </View>
+                <View style={dpS.quickRow}>
+                    {[{l:"Today",d:0},{l:"Tomorrow",d:1},{l:"+3 Days",d:3},{l:"Next Week",d:7}].map(({l,d}) => (
+                        <TouchableOpacity key={l} style={dpS.quickBtn} onPress={() => { const dt = new Date(); dt.setDate(dt.getDate()+d); setViewYear(dt.getFullYear()); setViewMonth(dt.getMonth()); setSelDay(dt.getDate()); }}>
+                            <Text style={dpS.quickTxt}>{l}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+                <View style={dpS.actions}>
+                    <TouchableOpacity style={dpS.cancelBtn} onPress={onCancel}><Text style={dpS.cancelTxt}>Cancel</Text></TouchableOpacity>
+                    <TouchableOpacity style={[dpS.confirmBtn, !selDay && {opacity:0.4}]} onPress={confirm} disabled={!selDay}><Text style={dpS.confirmTxt}>Set Date</Text></TouchableOpacity>
+                </View>
+            </View>
+        </Modal>
+    );
+}
+
+const dpS = StyleSheet.create({
+    overlay: {...StyleSheet.absoluteFillObject, backgroundColor:"rgba(0,0,0,0.7)"},
+    card: {position:"absolute",left:16,right:16,top:"12%",backgroundColor:"#1A1A1A",borderRadius:16,padding:16,borderWidth:1,borderColor:"#2A2A2A"},
+    navRow: {flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginBottom:12},
+    navBtn: {padding:8,borderRadius:8,backgroundColor:"#262626"},
+    monthTitle: {color:"#F0F0F0",fontWeight:"700",fontSize:16},
+    dayHeaderRow: {flexDirection:"row",marginBottom:4},
+    dayHeader: {flex:1,textAlign:"center",color:"#9E9E9E",fontSize:11,fontWeight:"700"},
+    grid: {flexDirection:"row",flexWrap:"wrap"},
+    cell: {width:`${100/7}%` as any,aspectRatio:1,alignItems:"center",justifyContent:"center",borderRadius:8},
+    cellSel: {backgroundColor:"#FF5722"},
+    cellToday: {borderWidth:1,borderColor:"#FF5722"},
+    cellTxt: {color:"#F0F0F0",fontSize:13},
+    cellTxtSel: {color:"#FFFFFF",fontWeight:"700"},
+    cellTxtToday: {color:"#FF5722",fontWeight:"700"},
+    timeRow: {flexDirection:"row",alignItems:"center",gap:6,marginTop:14,paddingTop:12,borderTopWidth:1,borderTopColor:"#262626"},
+    timeLabel: {color:"#9E9E9E",fontSize:13,flex:1},
+    timeBtn: {padding:6,borderRadius:6,backgroundColor:"#262626"},
+    timeVal: {color:"#F0F0F0",fontSize:16,fontWeight:"700",minWidth:28,textAlign:"center"},
+    timeSep: {color:"#F0F0F0",fontSize:16,fontWeight:"700"},
+    quickRow: {flexDirection:"row",gap:6,marginTop:12,flexWrap:"wrap"},
+    quickBtn: {paddingHorizontal:10,paddingVertical:6,backgroundColor:"#262626",borderRadius:20,borderWidth:1,borderColor:"#404040"},
+    quickTxt: {color:"#F0F0F0",fontSize:11,fontWeight:"600"},
+    actions: {flexDirection:"row",gap:8,marginTop:16},
+    cancelBtn: {flex:1,padding:12,borderRadius:8,borderWidth:1,borderColor:"#404040",alignItems:"center"},
+    cancelTxt: {color:"#9E9E9E",fontWeight:"700"},
+    confirmBtn: {flex:1,padding:12,borderRadius:8,backgroundColor:"#FF5722",alignItems:"center"},
+    confirmTxt: {color:"#FFFFFF",fontWeight:"700"},
+});
 
 type ViewMode = "today" | "week" | "all" | "by_category";
 
@@ -68,10 +173,15 @@ export default function Tasks() {
         });
     }, [tasks, view, category]);
 
+    const [quickDueAt, setQuickDueAt] = useState("");
+    const [showQuickDatePicker, setShowQuickDatePicker] = useState(false);
+
     const onQuickAdd = async () => {
         const title = quickAdd.trim();
         if (!title) return;
         setQuickAdd("");
+        const due = quickDueAt;
+        setQuickDueAt("");
         const optimistic: Task = {
             id: `tmp-${Date.now()}`, title,
             category: category || "personal",
@@ -80,7 +190,7 @@ export default function Tasks() {
         };
         setTasks((prev) => [...prev, optimistic]);
         try {
-            const created = await api.post<Task>("/tasks", { title, category: category || "personal", priority: "medium" });
+            const created = await api.post<Task>("/tasks", { title, category: category || "personal", priority: "medium", due_at: due || null });
             setTasks((prev) => prev.map((t) => (t.id === optimistic.id ? created : t)));
         } catch (err) {
             console.warn(err);
@@ -184,18 +294,27 @@ export default function Tasks() {
                 <FlatList data={filtered} keyExtractor={(t) => t.id} renderItem={renderTask} contentContainerStyle={{ paddingBottom: 160 }} testID="task-list" />
             )}
 
+            <DatePickerModal
+                visible={showQuickDatePicker}
+                value={quickDueAt}
+                onConfirm={(iso) => { setQuickDueAt(iso); setShowQuickDatePicker(false); }}
+                onCancel={() => setShowQuickDatePicker(false)}
+            />
             <View style={[styles.quickAdd, { paddingBottom: Math.max(insets.bottom, spacing.sm) + 4 }]}>
                 <Feather name="plus" size={18} color={colors.brand} />
                 <TextInput
                     value={quickAdd}
                     onChangeText={setQuickAdd}
-                    placeholder="Add a task and press return"
+                    placeholder="Add a task..."
                     placeholderTextColor={colors.onSurfaceSecondary}
                     onSubmitEditing={onQuickAdd}
                     returnKeyType="done"
                     style={styles.quickInput}
                     testID="quick-add-input"
                 />
+                <TouchableOpacity onPress={() => setShowQuickDatePicker(true)} style={[styles.dateIconBtn, !!quickDueAt && styles.dateIconBtnActive]} testID="quick-date-btn">
+                    <Feather name="calendar" size={16} color={quickDueAt ? colors.brand : colors.onSurfaceSecondary} />
+                </TouchableOpacity>
                 <Pressable onPress={onQuickAdd} disabled={!quickAdd.trim()} style={[styles.addBtn, !quickAdd.trim() && { opacity: 0.4 }]} testID="quick-add-submit">
                     <Text style={styles.addBtnText}>Add</Text>
                 </Pressable>
@@ -223,6 +342,7 @@ function TaskDetailSheet({ task, onClose, onSaved, onDeleted }: {
     const [priority, setPriority] = useState<TaskPriority>(task?.priority || "medium");
     const [cat, setCat] = useState<TaskCategory>(task?.category || "personal");
     const [dueAt, setDueAt] = useState(task?.due_at || "");
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     useMemo(() => {
         setTitle(task?.title || "");
@@ -230,6 +350,7 @@ function TaskDetailSheet({ task, onClose, onSaved, onDeleted }: {
         setPriority(task?.priority || "medium");
         setCat(task?.category || "personal");
         setDueAt(task?.due_at || "");
+        setShowDatePicker(false);
     }, [task]);
 
     if (!task) return null;
@@ -254,8 +375,24 @@ function TaskDetailSheet({ task, onClose, onSaved, onDeleted }: {
                         <TextInput value={title} onChangeText={setTitle} style={styles.field} placeholderTextColor={colors.onSurfaceSecondary} testID="detail-title" />
                         <Text style={styles.sheetLabel}>Description</Text>
                         <TextInput value={desc} onChangeText={setDesc} style={[styles.field, { minHeight: 64 }]} multiline placeholder="Optional notes" placeholderTextColor={colors.onSurfaceSecondary} testID="detail-desc" />
-                        <Text style={styles.sheetLabel}>Due (YYYY-MM-DD HH:MM)</Text>
-                        <TextInput value={dueAt} onChangeText={setDueAt} placeholder="e.g. 2026-05-15T18:00" placeholderTextColor={colors.onSurfaceSecondary} style={styles.field} testID="detail-due" autoCapitalize="none" />
+                        <Text style={styles.sheetLabel}>Due Date</Text>
+                        <DatePickerModal
+                            visible={showDatePicker}
+                            value={dueAt}
+                            onConfirm={(iso) => { setDueAt(iso); setShowDatePicker(false); }}
+                            onCancel={() => setShowDatePicker(false)}
+                        />
+                        <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.datePicker} testID="detail-due">
+                            <Feather name="calendar" size={16} color={dueAt ? colors.brand : colors.onSurfaceSecondary} />
+                            <Text style={[styles.datePickerText, !dueAt && { color: colors.onSurfaceSecondary }]}>
+                                {dueAt ? formatDateTime(dueAt) : "Tap to set a due date"}
+                            </Text>
+                            {!!dueAt && (
+                                <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); setDueAt(""); }} hitSlop={8}>
+                                    <Feather name="x" size={14} color={colors.onSurfaceSecondary} />
+                                </TouchableOpacity>
+                            )}
+                        </TouchableOpacity>
                         <Text style={styles.sheetLabel}>Category</Text>
                         <View style={styles.chipGroup}>
                             {CATEGORIES.map((c) => (
@@ -313,7 +450,11 @@ const styles = StyleSheet.create({
     emptyTitle: { color: colors.onSurface, fontFamily: fontFamily.display, fontSize: fontSize.xl, marginTop: spacing.md, fontWeight: "700" },
     muted: { color: colors.onSurfaceSecondary, fontSize: fontSize.sm, marginTop: 2 },
     quickAdd: { position: "absolute", left: 0, right: 0, bottom: Platform.OS === "ios" ? 84 : 64, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surfaceSecondary },
-    quickInput: { flex: 1, color: colors.onSurface, fontFamily: fontFamily.text, fontSize: fontSize.lg, paddingVertical: spacing.sm },
+    quickInput: { flex: 1, color: colors.onSurface, fontFamily: fontFamily.text, fontSize: fontSize.base, paddingVertical: spacing.sm },
+    dateIconBtn: { padding: 8, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceTertiary },
+    dateIconBtnActive: { borderColor: colors.brand, backgroundColor: colors.brandTertiary },
+    datePicker: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceTertiary, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },
+    datePickerText: { flex: 1, color: colors.onSurface, fontFamily: fontFamily.text, fontSize: fontSize.base },
     addBtn: { backgroundColor: colors.brand, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md },
     addBtnText: { color: colors.onBrand, fontWeight: "700", fontSize: fontSize.sm },
     backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
