@@ -3,13 +3,15 @@
 Single-user, no auth. All collections use string `id`s (UUIDs).
 """
 
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 import os
 import logging
 import uuid
+import hashlib
+import secrets
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import List, Optional, Literal, Dict, Any
@@ -35,8 +37,33 @@ def now_iso() -> str:
 def new_id() -> str:
     return str(uuid.uuid4())
 
+def hash_password(password: str) -> str:
+    salt = "freelance_os_"
+    return hashlib.sha256((salt + password).encode()).hexdigest()
+
+def get_current_user(request: Request) -> str:
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.startswith("Bearer "):
+        raise HTTPException(401, "Missing or invalid token")
+    token = auth.split(" ")[1]
+    res = supabase.table("users").select("id").eq("token", token).execute()
+    if not res.data:
+        raise HTTPException(401, "Invalid token")
+    return res.data[0]["id"]
+
 
 # ---------- Models ----------
+class RegisterIn(BaseModel):
+    username: str
+    password: str
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+class AuthOut(BaseModel):
+    token: str
+
 TaskStatus = Literal["todo", "in_progress", "done"]
 TaskPriority = Literal["high", "medium", "low"]
 TaskCategory = Literal["client_work", "startup", "learning", "personal"]
@@ -142,10 +169,43 @@ class DailyFocus(BaseModel):
     text: str = ""
 
 
+# ---------- Auth ----------
+@api_router.post("/auth/register", response_model=AuthOut)
+def register(body: RegisterIn):
+    existing = supabase.table("users").select("id").eq("username", body.username).execute()
+    if existing.data:
+        raise HTTPException(400, "Username already exists")
+    
+    token = secrets.token_hex(32)
+    user_id = new_id()
+    doc = {
+        "id": user_id,
+        "username": body.username,
+        "password_hash": hash_password(body.password),
+        "token": token,
+        "created_at": now_iso()
+    }
+    supabase.table("users").insert(doc).execute()
+    return {"token": token}
+
+@api_router.post("/auth/login", response_model=AuthOut)
+def login(body: LoginIn):
+    res = supabase.table("users").select("*").eq("username", body.username).execute()
+    if not res.data:
+        raise HTTPException(401, "Invalid username or password")
+    user = res.data[0]
+    if user["password_hash"] != hash_password(body.password):
+        raise HTTPException(401, "Invalid username or password")
+    
+    token = secrets.token_hex(32)
+    supabase.table("users").update({"token": token}).eq("id", user["id"]).execute()
+    return {"token": token}
+
+
 # ---------- Tasks ----------
 @api_router.get("/tasks", response_model=List[Task])
-def list_tasks(status: Optional[TaskStatus] = None, category: Optional[TaskCategory] = None):
-    query = supabase.table("tasks").select("*").order("order")
+def list_tasks(status: Optional[TaskStatus] = None, category: Optional[TaskCategory] = None, user_id: str = Depends(get_current_user)):
+    query = supabase.table("tasks").select("*").eq("user_id", user_id).order("order")
     if status:
         query = query.eq("status", status)
     if category:
@@ -155,8 +215,9 @@ def list_tasks(status: Optional[TaskStatus] = None, category: Optional[TaskCateg
 
 
 @api_router.post("/tasks", response_model=Task)
-def create_task(body: TaskIn):
+def create_task(body: TaskIn, user_id: str = Depends(get_current_user)):
     doc = body.model_dump()
+    doc["user_id"] = user_id
     if doc.get("order") is None:
         doc["order"] = datetime.now(timezone.utc).timestamp() * 1000
     doc["id"] = new_id()
@@ -167,21 +228,21 @@ def create_task(body: TaskIn):
 
 
 @api_router.patch("/tasks/{task_id}", response_model=Task)
-def update_task(task_id: str, body: TaskPatch):
+def update_task(task_id: str, body: TaskPatch, user_id: str = Depends(get_current_user)):
     patch = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
     if patch.get("status") == "done":
         patch["completed_at"] = now_iso()
     elif "status" in patch and patch["status"] != "done":
         patch["completed_at"] = None
-    res = supabase.table("tasks").update(patch).eq("id", task_id).execute()
+    res = supabase.table("tasks").update(patch).eq("id", task_id).eq("user_id", user_id).execute()
     if not res.data:
         raise HTTPException(404, "Task not found")
     return res.data[0]
 
 
 @api_router.delete("/tasks/{task_id}")
-def delete_task(task_id: str):
-    res = supabase.table("tasks").delete().eq("id", task_id).execute()
+def delete_task(task_id: str, user_id: str = Depends(get_current_user)):
+    res = supabase.table("tasks").delete().eq("id", task_id).eq("user_id", user_id).execute()
     if not res.data:
         raise HTTPException(404, "Task not found")
     return {"ok": True}
@@ -192,22 +253,23 @@ class ReorderBody(BaseModel):
 
 
 @api_router.post("/tasks/reorder")
-def reorder_tasks(body: ReorderBody):
+def reorder_tasks(body: ReorderBody, user_id: str = Depends(get_current_user)):
     for idx, tid in enumerate(body.ids):
-        supabase.table("tasks").update({"order": float(idx)}).eq("id", tid).execute()
+        supabase.table("tasks").update({"order": float(idx)}).eq("id", tid).eq("user_id", user_id).execute()
     return {"ok": True}
 
 
 # ---------- Clients ----------
 @api_router.get("/clients", response_model=List[ClientOut])
-def list_clients():
-    res = supabase.table("clients").select("*").order("created_at", desc=True).execute()
+def list_clients(user_id: str = Depends(get_current_user)):
+    res = supabase.table("clients").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     return res.data
 
 
 @api_router.post("/clients", response_model=ClientOut)
-def create_client(body: ClientIn):
+def create_client(body: ClientIn, user_id: str = Depends(get_current_user)):
     doc = body.model_dump()
+    doc["user_id"] = user_id
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
     res = supabase.table("clients").insert(doc).execute()
@@ -215,23 +277,23 @@ def create_client(body: ClientIn):
 
 
 @api_router.patch("/clients/{cid}", response_model=ClientOut)
-def update_client(cid: str, body: ClientIn):
-    res = supabase.table("clients").update(body.model_dump()).eq("id", cid).execute()
+def update_client(cid: str, body: ClientIn, user_id: str = Depends(get_current_user)):
+    res = supabase.table("clients").update(body.model_dump()).eq("id", cid).eq("user_id", user_id).execute()
     if not res.data:
         raise HTTPException(404, "Client not found")
     return res.data[0]
 
 
 @api_router.delete("/clients/{cid}")
-def delete_client(cid: str):
-    supabase.table("clients").delete().eq("id", cid).execute()
+def delete_client(cid: str, user_id: str = Depends(get_current_user)):
+    supabase.table("clients").delete().eq("id", cid).eq("user_id", user_id).execute()
     return {"ok": True}
 
 
 # ---------- Projects ----------
 @api_router.get("/projects", response_model=List[ProjectOut])
-def list_projects(client_id: Optional[str] = None):
-    query = supabase.table("projects").select("*").order("created_at", desc=True)
+def list_projects(client_id: Optional[str] = None, user_id: str = Depends(get_current_user)):
+    query = supabase.table("projects").select("*").eq("user_id", user_id).order("created_at", desc=True)
     if client_id:
         query = query.eq("client_id", client_id)
     res = query.execute()
@@ -239,8 +301,9 @@ def list_projects(client_id: Optional[str] = None):
 
 
 @api_router.post("/projects", response_model=ProjectOut)
-def create_project(body: ProjectIn):
+def create_project(body: ProjectIn, user_id: str = Depends(get_current_user)):
     doc = body.model_dump()
+    doc["user_id"] = user_id
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
     res = supabase.table("projects").insert(doc).execute()
@@ -248,29 +311,30 @@ def create_project(body: ProjectIn):
 
 
 @api_router.patch("/projects/{pid}", response_model=ProjectOut)
-def update_project(pid: str, body: ProjectIn):
-    res = supabase.table("projects").update(body.model_dump()).eq("id", pid).execute()
+def update_project(pid: str, body: ProjectIn, user_id: str = Depends(get_current_user)):
+    res = supabase.table("projects").update(body.model_dump()).eq("id", pid).eq("user_id", user_id).execute()
     if not res.data:
         raise HTTPException(404, "Project not found")
     return res.data[0]
 
 
 @api_router.delete("/projects/{pid}")
-def delete_project(pid: str):
-    supabase.table("projects").delete().eq("id", pid).execute()
+def delete_project(pid: str, user_id: str = Depends(get_current_user)):
+    supabase.table("projects").delete().eq("id", pid).eq("user_id", user_id).execute()
     return {"ok": True}
 
 
 # ---------- Events ----------
 @api_router.get("/events", response_model=List[EventOut])
-def list_events():
-    res = supabase.table("events").select("*").order("start_at").execute()
+def list_events(user_id: str = Depends(get_current_user)):
+    res = supabase.table("events").select("*").eq("user_id", user_id).order("start_at").execute()
     return res.data
 
 
 @api_router.post("/events", response_model=EventOut)
-def create_event(body: EventIn):
+def create_event(body: EventIn, user_id: str = Depends(get_current_user)):
     doc = body.model_dump()
+    doc["user_id"] = user_id
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
     res = supabase.table("events").insert(doc).execute()
@@ -278,32 +342,33 @@ def create_event(body: EventIn):
 
 
 @api_router.patch("/events/{eid}", response_model=EventOut)
-def update_event(eid: str, body: EventIn):
-    res = supabase.table("events").update(body.model_dump()).eq("id", eid).execute()
+def update_event(eid: str, body: EventIn, user_id: str = Depends(get_current_user)):
+    res = supabase.table("events").update(body.model_dump()).eq("id", eid).eq("user_id", user_id).execute()
     if not res.data:
         raise HTTPException(404, "Event not found")
     return res.data[0]
 
 
 @api_router.delete("/events/{eid}")
-def delete_event(eid: str):
-    supabase.table("events").delete().eq("id", eid).execute()
+def delete_event(eid: str, user_id: str = Depends(get_current_user)):
+    supabase.table("events").delete().eq("id", eid).eq("user_id", user_id).execute()
     return {"ok": True}
 
 
 # ---------- Habits ----------
 @api_router.get("/habits", response_model=List[HabitOut])
-def list_habits():
-    res = supabase.table("habits").select("*").order("created_at").execute()
+def list_habits(user_id: str = Depends(get_current_user)):
+    res = supabase.table("habits").select("*").eq("user_id", user_id).order("created_at").execute()
     return res.data
 
 
 @api_router.post("/habits", response_model=HabitOut)
-def create_habit(body: HabitIn):
-    count_res = supabase.table("habits").select("id", count="exact").execute()
+def create_habit(body: HabitIn, user_id: str = Depends(get_current_user)):
+    count_res = supabase.table("habits").select("id", count="exact").eq("user_id", user_id).execute()
     if count_res.count and count_res.count >= 7:
         raise HTTPException(400, "Max 7 habits — keep the list short on purpose.")
     doc = body.model_dump()
+    doc["user_id"] = user_id
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
     res = supabase.table("habits").insert(doc).execute()
@@ -311,22 +376,22 @@ def create_habit(body: HabitIn):
 
 
 @api_router.patch("/habits/{hid}", response_model=HabitOut)
-def update_habit(hid: str, body: HabitIn):
-    res = supabase.table("habits").update(body.model_dump()).eq("id", hid).execute()
+def update_habit(hid: str, body: HabitIn, user_id: str = Depends(get_current_user)):
+    res = supabase.table("habits").update(body.model_dump()).eq("id", hid).eq("user_id", user_id).execute()
     if not res.data:
         raise HTTPException(404, "Habit not found")
     return res.data[0]
 
 
 @api_router.delete("/habits/{hid}")
-def delete_habit(hid: str):
-    supabase.table("habits").delete().eq("id", hid).execute()
+def delete_habit(hid: str, user_id: str = Depends(get_current_user)):
+    supabase.table("habits").delete().eq("id", hid).eq("user_id", user_id).execute()
     return {"ok": True}
 
 
 @api_router.get("/habit-logs", response_model=List[HabitLogOut])
-def list_habit_logs(start: Optional[str] = None, end: Optional[str] = None):
-    query = supabase.table("habit_logs").select("*")
+def list_habit_logs(start: Optional[str] = None, end: Optional[str] = None, user_id: str = Depends(get_current_user)):
+    query = supabase.table("habit_logs").select("*").eq("user_id", user_id)
     if start:
         query = query.gte("date", start)
     if end:
@@ -336,8 +401,8 @@ def list_habit_logs(start: Optional[str] = None, end: Optional[str] = None):
 
 
 @api_router.post("/habit-logs/toggle", response_model=HabitLogOut)
-def toggle_habit_log(body: HabitLogIn):
-    existing = supabase.table("habit_logs").select("*").eq("habit_id", body.habit_id).eq("date", body.date).execute()
+def toggle_habit_log(body: HabitLogIn, user_id: str = Depends(get_current_user)):
+    existing = supabase.table("habit_logs").select("*").eq("habit_id", body.habit_id).eq("date", body.date).eq("user_id", user_id).execute()
     if existing.data:
         log = existing.data[0]
         if log["done"]:
@@ -348,6 +413,7 @@ def toggle_habit_log(body: HabitLogIn):
         log["done"] = True
         return log
     doc = body.model_dump()
+    doc["user_id"] = user_id
     doc["id"] = new_id()
     doc["done"] = True
     res = supabase.table("habit_logs").insert(doc).execute()
@@ -356,44 +422,46 @@ def toggle_habit_log(body: HabitLogIn):
 
 # ---------- Daily Focus ----------
 @api_router.get("/daily-focus/{day}", response_model=DailyFocus)
-def get_focus(day: str):
-    res = supabase.table("daily_focus").select("*").eq("date", day).execute()
+def get_focus(day: str, user_id: str = Depends(get_current_user)):
+    res = supabase.table("daily_focus").select("*").eq("user_id", user_id).eq("date", day).execute()
     if res.data:
         return res.data[0]
     return {"date": day, "text": ""}
 
 
 @api_router.put("/daily-focus/{day}", response_model=DailyFocus)
-def set_focus(day: str, body: DailyFocus):
-    payload = {"date": day, "text": body.text}
+def set_focus(day: str, body: DailyFocus, user_id: str = Depends(get_current_user)):
+    payload = {
+        "id": f"{user_id}_{day}",
+        "user_id": user_id,
+        "date": day, 
+        "text": body.text
+    }
     supabase.table("daily_focus").upsert(payload).execute()
     return payload
 
 
 # ---------- Export / Import ----------
 @api_router.get("/export")
-def export_all():
+def export_all(user_id: str = Depends(get_current_user)):
     collections = ["tasks", "clients", "projects", "events", "habits", "habit_logs", "daily_focus"]
     out: Dict[str, Any] = {"exported_at": now_iso(), "version": 1}
     for c in collections:
-        res = supabase.table(c).select("*").execute()
+        res = supabase.table(c).select("*").eq("user_id", user_id).execute()
         out[c] = res.data
     return out
 
 
 @api_router.post("/import")
-def import_all(payload: Dict[str, Any]):
+def import_all(payload: Dict[str, Any], user_id: str = Depends(get_current_user)):
     collections = ["tasks", "clients", "projects", "events", "habits", "habit_logs", "daily_focus"]
     for c in collections:
         if c in payload and isinstance(payload[c], list):
-            # In Supabase, deleting all records safely usually means deleting where id != null or using TRUNCATE.
-            # We'll fetch all and delete if possible, or just ignore for now.
-            # Warning: A generic delete without a filter might fail, we should filter by not null.
-            if c == "daily_focus":
-                supabase.table(c).delete().neq("date", "non_existent").execute()
-            else:
-                supabase.table(c).delete().neq("id", "non_existent").execute()
+            supabase.table(c).delete().eq("user_id", user_id).execute()
             if payload[c]:
+                # Force user_id on all imported records
+                for record in payload[c]:
+                    record["user_id"] = user_id
                 supabase.table(c).insert(payload[c]).execute()
     return {"ok": True}
 
@@ -415,5 +483,3 @@ app.include_router(api_router)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
-# No shutdown event needed for sync Supabase client

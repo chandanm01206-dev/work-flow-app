@@ -4,13 +4,25 @@
  */
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+let currentToken: string | null = null;
+
+export const setApiToken = (token: string | null) => {
+    currentToken = token;
+};
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(init?.headers as any || {}),
+    };
+
+    if (currentToken) {
+        headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+
     const res = await fetch(`${BASE}/api${path}`, {
         ...init,
-        headers: {
-            "Content-Type": "application/json",
-            ...(init?.headers || {}),
-        },
+        headers,
     });
     if (!res.ok) {
         const text = await res.text().catch(() => "");
