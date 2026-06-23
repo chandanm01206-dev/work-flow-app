@@ -35,8 +35,13 @@ export default function LoginScreen() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
             <View style={styles.card}>
-                <Text style={styles.title}>Freelance OS</Text>
-                <Text style={styles.subtitle}>{isRegistering ? "Create an account" : "Welcome back"}</Text>
+                <View style={styles.header}>
+                    <View style={styles.iconBox}>
+                        <Feather name="layers" size={32} color={colors.onBrand} />
+                    </View>
+                    <Text style={styles.title}>Too do</Text>
+                    <Text style={styles.subtitle}>{isRegistering ? "Create an account" : "Welcome back"}</Text>
+                </View>
 
                 <View style={styles.inputContainer}>
                     <Text style={styles.label}>Username</Text>
