@@ -142,153 +142,96 @@ export default function Dashboard() {
     if (loading) {
         return (
             <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
-                <ActivityIndicator color={colors.brand} />
+                <ActivityIndicator color={colors.surfaceDark} />
             </View>
         );
     }
 
     return (
-        <View style={[styles.root, { paddingTop: insets.top }]}>
-            <View style={styles.header} testID="dashboard-header">
-                <View>
-                    <Text style={styles.eyebrow}>
-                        {new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}
-                    </Text>
-                    <Text style={styles.h1}>Today</Text>
+        <View style={styles.root}>
+            <View style={[styles.headerDark, { paddingTop: insets.top + spacing.xl }]}>
+                <View style={styles.headerTop}>
+                    <View>
+                        <Text style={styles.greeting}>Hey User!</Text>
+                        <Text style={styles.headerTitle}>Let's find your{"\n"}best project!</Text>
+                    </View>
+                    <View style={styles.avatarPlaceholder} />
                 </View>
-                <Pressable testID="open-settings" onPress={() => router.push("/settings")} style={styles.iconBtn}>
-                    <Feather name="settings" size={18} color={colors.onSurface} />
-                </Pressable>
+                
+                {/* Simulated wavy lines could be an SVG here, but we use a dark background for now */}
             </View>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxxl + 80 }} showsVerticalScrollIndicator={false}>
-                {/* Daily Focus */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Daily Focus</Text>
-                    <TextInput
-                        testID="daily-focus-input"
-                        value={focusText}
-                        onChangeText={(v) => { setFocusText(v); setFocusDirty(true); }}
-                        onBlur={saveFocus}
-                        placeholder="What's the ONE thing today?"
-                        placeholderTextColor={colors.onSurfaceSecondary}
-                        style={styles.focusInput}
-                        returnKeyType="done"
-                        onSubmitEditing={saveFocus}
+            <View style={styles.searchContainer}>
+                <View style={styles.searchBox}>
+                    <Feather name="search" size={20} color={colors.onSurfaceSecondary} />
+                    <TextInput 
+                        placeholder="Search" 
+                        placeholderTextColor={colors.onSurfaceSecondary} 
+                        style={styles.searchInput}
                     />
-                </View>
-
-                {/* Upcoming deliveries */}
-                {upcomingDeliveries.length > 0 && (
-                    <View style={{ marginTop: spacing.lg }}>
-                        <Text style={[styles.sectionLabel, { paddingHorizontal: spacing.lg }]}>
-                            Upcoming Deliveries · Next 7 days
-                        </Text>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
-                            style={styles.chipRow}
-                        >
-                            {upcomingDeliveries.map((p) => {
-                                const client = clients.find((c) => c.id === p.client_id);
-                                return (
-                                    <View key={p.id} style={styles.deliveryChip} testID={`delivery-${p.id}`}>
-                                        <Text style={styles.chipClient}>{client?.name || "—"}</Text>
-                                        <Text style={styles.chipProject} numberOfLines={1}>{p.name}</Text>
-                                        <Text style={styles.chipDate}>
-                                            {new Date(p.deadline!).toLocaleDateString([], { month: "short", day: "numeric" })}
-                                        </Text>
-                                    </View>
-                                );
-                            })}
-                        </ScrollView>
+                    <View style={styles.filterBtn}>
+                        <Feather name="sliders" size={16} color={colors.onSurfaceDark} />
                     </View>
-                )}
+                </View>
+            </View>
 
-                {/* Today's Schedule */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Today's Schedule</Text>
-                    {todaysEvents.length === 0 ? (
-                        <Text style={styles.muted}>Nothing scheduled.</Text>
-                    ) : (
-                        todaysEvents.map((ev) => (
-                            <View key={ev.id} style={styles.eventRow} testID={`event-row-${ev.id}`}>
-                                <Text style={styles.eventTime}>{formatTime(ev.start_at)}</Text>
-                                <View style={styles.eventBar} />
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.eventTitle}>{ev.title}</Text>
-                                    <Text style={styles.muted}>{ev.type.toUpperCase()}</Text>
+            <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxxl + 120 }} showsVerticalScrollIndicator={false}>
+                {/* Projects Section */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Project</Text>
+                    <Text style={styles.sectionLink}>All Task</Text>
+                </View>
+
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.projectsScroll}
+                >
+                    {/* Dark Card */}
+                    <View style={styles.projectCardDark}>
+                        <View style={styles.projectIconDark}>
+                            <Feather name="box" size={24} color={colors.onSurfaceDark} />
+                        </View>
+                        <Text style={styles.projectCardTitleDark}>Game Design</Text>
+                        <Text style={styles.projectCardDescDark}>Create menu in dashboard & Make user flow</Text>
+                        <TouchableOpacity style={styles.projectCardAction}>
+                            <Feather name="chevron-right" size={20} color={colors.brand} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Light Card */}
+                    <View style={styles.projectCardLight}>
+                        <View style={styles.projectIconLight}>
+                            <Feather name="pie-chart" size={24} color={colors.brand} />
+                        </View>
+                        <Text style={styles.projectCardTitleLight}>Decision</Text>
+                        <Text style={styles.projectCardDescLight}>Edit icons for team task for next week</Text>
+                    </View>
+                </ScrollView>
+
+                {/* Tasks Section */}
+                <View style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
+                    <Text style={styles.sectionTitle}>Tasks</Text>
+                    <Text style={styles.sectionLink}>View all</Text>
+                </View>
+
+                <View style={styles.tasksList}>
+                    {todaysTasks.slice(0, 3).map((t, idx) => {
+                        const done = t.status === "done";
+                        return (
+                            <Pressable key={t.id} style={styles.taskCard} onPress={() => toggleTaskDone(t)}>
+                                <View style={[styles.circularCheckbox, done && styles.circularCheckboxDone]}>
+                                    {done && <Feather name="check" size={14} color={colors.onSurfaceDark} />}
                                 </View>
-                            </View>
-                        ))
-                    )}
-                </View>
-
-                {/* Habits */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Today's Habits</Text>
-                    {habits.length === 0 ? (
-                        <Pressable onPress={() => router.push("/(tabs)/habits")}>
-                            <Text style={styles.muted}>No habits yet. Tap the Habits tab to add up to 7.</Text>
-                        </Pressable>
-                    ) : (
-                        habits.map((h) => {
-                            const done = completedHabitIds.has(h.id);
-                            return (
-                                <Pressable
-                                    key={h.id}
-                                    onPress={() => toggleHabit(h.id)}
-                                    style={styles.habitRow}
-                                    testID={`habit-toggle-${h.id}`}
-                                >
-                                    <View style={[styles.checkbox, done && styles.checkboxOn]}>
-                                        {done && <Feather name="check" size={14} color={colors.onBrand} />}
-                                    </View>
-                                    <Text style={[styles.habitName, done && styles.habitDone]}>{h.name}</Text>
-                                </Pressable>
-                            );
-                        })
-                    )}
-                </View>
-
-                {/* Priority Tasks */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Priority Tasks</Text>
-                    {todaysTasks.length === 0 ? (
-                        <Text style={styles.muted}>You're clear for today.</Text>
-                    ) : (
-                        todaysTasks.map((t) => {
-                            const overdue = isOverdue(t.due_at);
-                            const pri = PRIORITIES.find((p) => p.key === t.priority)!;
-                            return (
-                                <Pressable
-                                    key={t.id}
-                                    style={styles.taskRow}
-                                    onPress={() => toggleTaskDone(t)}
-                                    testID={`dashboard-task-${t.id}`}
-                                >
-                                    <View style={[styles.checkbox, t.status === "done" && styles.checkboxOn]}>
-                                        {t.status === "done" && <Feather name="check" size={14} color={colors.onBrand} />}
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text
-                                            style={[styles.taskTitle, t.status === "done" && styles.taskDone, overdue && { color: colors.error }]}
-                                            numberOfLines={1}
-                                        >
-                                            {t.title}
-                                        </Text>
-                                        {t.due_at && (
-                                            <Text style={[styles.muted, overdue && { color: colors.error }]}>
-                                                {overdue ? "OVERDUE · " : ""}
-                                                {new Date(t.due_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                                            </Text>
-                                        )}
-                                    </View>
-                                    <View style={[styles.priDot, { backgroundColor: pri.color }]} />
-                                </Pressable>
-                            );
-                        })
+                                <Text style={[styles.taskCardTitle, done && styles.taskDoneText]} numberOfLines={2}>
+                                    {t.title}
+                                </Text>
+                                <View style={styles.taskCardDot} />
+                            </Pressable>
+                        );
+                    })}
+                    {todaysTasks.length === 0 && (
+                        <Text style={[styles.muted, { paddingHorizontal: spacing.lg }]}>No tasks for today.</Text>
                     )}
                 </View>
             </ScrollView>
@@ -299,103 +242,216 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.surface },
     center: { alignItems: "center", justifyContent: "center" },
-    header: {
+    
+    headerDark: {
+        backgroundColor: colors.surfaceDark,
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
+        paddingBottom: 48,
+        paddingHorizontal: spacing.xl,
+    },
+    headerTop: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+    },
+    greeting: {
+        color: colors.onSurfaceSecondary,
+        fontSize: fontSize.sm,
+        fontWeight: "600",
+        marginBottom: 8,
+    },
+    headerTitle: {
+        color: colors.onSurfaceDark,
+        fontSize: fontSize.xxxl,
+        fontWeight: "700",
+        lineHeight: 36,
+    },
+    avatarPlaceholder: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: colors.surfaceSecondary,
+        borderWidth: 2,
+        borderColor: colors.surfaceTertiary,
+    },
+
+    searchContainer: {
+        marginTop: -28,
+        paddingHorizontal: spacing.xl,
+        zIndex: 10,
+    },
+    searchBox: {
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: radius.pill,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: spacing.lg,
+        paddingVertical: 12,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+        elevation: 4,
+    },
+    searchInput: {
+        flex: 1,
+        marginLeft: spacing.md,
+        fontFamily: fontFamily.text,
+        fontSize: fontSize.base,
+        color: colors.onSurface,
+    },
+    filterBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: colors.surfaceDark,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    sectionHeader: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "flex-end",
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.lg,
-        paddingBottom: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.divider,
+        paddingHorizontal: spacing.xl,
+        marginTop: spacing.xl,
+        marginBottom: spacing.md,
     },
-    eyebrow: {
-        color: colors.onSurfaceSecondary,
-        fontFamily: fontFamily.text,
-        fontSize: fontSize.sm,
-        letterSpacing: 1.2,
-        textTransform: "uppercase",
-    },
-    h1: {
-        color: colors.onSurface,
-        fontFamily: fontFamily.display,
-        fontSize: fontSize.xxxl,
+    sectionTitle: {
+        fontSize: fontSize.xxl,
         fontWeight: "700",
-        letterSpacing: 0.5,
+        color: colors.onSurface,
     },
-    iconBtn: {
+    sectionLink: {
+        fontSize: fontSize.sm,
+        fontWeight: "600",
+        color: colors.onSurfaceSecondary,
+    },
+
+    projectsScroll: {
+        paddingHorizontal: spacing.xl,
+        gap: spacing.lg,
+    },
+    projectCardDark: {
+        backgroundColor: colors.surfaceDark,
+        borderRadius: 32,
+        padding: spacing.xl,
+        width: 220,
+        height: 260,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+    projectIconDark: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: "rgba(255,255,255,0.1)",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: spacing.xl,
+    },
+    projectCardTitleDark: {
+        color: colors.onSurfaceDark,
+        fontSize: fontSize.xl,
+        fontWeight: "700",
+        marginBottom: spacing.sm,
+    },
+    projectCardDescDark: {
+        color: colors.onSurfaceSecondary,
+        fontSize: fontSize.sm,
+        lineHeight: 20,
+    },
+    projectCardAction: {
+        position: "absolute",
+        bottom: spacing.lg,
+        right: spacing.lg,
         width: 40,
         height: 40,
+        borderRadius: 20,
+        backgroundColor: colors.onSurfaceDark,
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: radius.md,
-        backgroundColor: colors.surfaceSecondary,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
-    section: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
-    sectionLabel: {
-        color: colors.onSurfaceSecondary,
-        fontFamily: fontFamily.text,
-        fontSize: fontSize.xs,
-        letterSpacing: 1.4,
-        textTransform: "uppercase",
-        marginBottom: spacing.sm,
-        fontWeight: "700",
+
+    projectCardLight: {
+        backgroundColor: "#E8EAF6",
+        borderRadius: 32,
+        padding: spacing.xl,
+        width: 200,
+        height: 220,
+        alignSelf: "flex-end",
     },
-    focusInput: {
+    projectIconLight: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         backgroundColor: colors.surfaceSecondary,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.md,
-        padding: spacing.md,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: spacing.lg,
+    },
+    projectCardTitleLight: {
         color: colors.onSurface,
-        fontFamily: fontFamily.text,
-        fontSize: fontSize.lg,
+        fontSize: fontSize.xl,
+        fontWeight: "700",
+        marginBottom: spacing.sm,
     },
-    chipRow: { paddingVertical: spacing.sm },
-    deliveryChip: {
+    projectCardDescLight: {
+        color: colors.onSurfaceSecondary,
+        fontSize: fontSize.sm,
+        lineHeight: 20,
+    },
+
+    tasksList: {
+        paddingHorizontal: spacing.xl,
+        gap: spacing.md,
+    },
+    taskCard: {
         backgroundColor: colors.surfaceSecondary,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderLeftWidth: 3,
-        borderLeftColor: colors.brand,
-        borderRadius: radius.md,
-        padding: spacing.md,
-        minWidth: 180,
-        flexShrink: 0,
-    },
-    chipClient: { color: colors.onSurfaceSecondary, fontSize: fontSize.xs, textTransform: "uppercase", letterSpacing: 1 },
-    chipProject: { color: colors.onSurface, fontSize: fontSize.lg, fontWeight: "600", marginTop: 2, fontFamily: fontFamily.text },
-    chipDate: { color: colors.brand, fontSize: fontSize.sm, fontWeight: "600", marginTop: spacing.xs, fontFamily: fontFamily.display, letterSpacing: 0.5 },
-    eventRow: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.sm, gap: spacing.md },
-    eventTime: { color: colors.brand, fontFamily: fontFamily.display, fontSize: fontSize.lg, width: 64, fontWeight: "700" },
-    eventBar: { width: 2, height: 28, backgroundColor: colors.border, borderRadius: 1 },
-    eventTitle: { color: colors.onSurface, fontFamily: fontFamily.text, fontSize: fontSize.lg },
-    muted: { color: colors.onSurfaceSecondary, fontSize: fontSize.sm, fontFamily: fontFamily.text, marginTop: 2 },
-    habitRow: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.sm, gap: spacing.md },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: radius.sm,
-        borderWidth: 1.5,
-        borderColor: colors.borderStrong,
-        backgroundColor: colors.surfaceSecondary,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    checkboxOn: { backgroundColor: colors.brand, borderColor: colors.brand },
-    habitName: { color: colors.onSurface, fontFamily: fontFamily.text, fontSize: fontSize.lg, flex: 1 },
-    habitDone: { color: colors.onSurfaceSecondary, textDecorationLine: "line-through" },
-    taskRow: {
+        borderRadius: 20,
+        padding: spacing.lg,
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: spacing.sm,
-        gap: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.divider,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
     },
-    taskTitle: { color: colors.onSurface, fontFamily: fontFamily.text, fontSize: fontSize.lg },
-    taskDone: { color: colors.onSurfaceSecondary, textDecorationLine: "line-through" },
-    priDot: { width: 8, height: 8, borderRadius: 4 },
+    circularCheckbox: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: colors.surfaceDark,
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: spacing.md,
+    },
+    circularCheckboxDone: {
+        backgroundColor: colors.surfaceDark,
+    },
+    taskCardTitle: {
+        flex: 1,
+        color: colors.onSurface,
+        fontSize: fontSize.base,
+        fontWeight: "600",
+        lineHeight: 20,
+    },
+    taskDoneText: {
+        color: colors.onSurfaceSecondary,
+        textDecorationLine: "line-through",
+    },
+    taskCardDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: colors.surfaceDark,
+        marginLeft: spacing.md,
+    },
+    muted: { color: colors.onSurfaceSecondary, fontSize: fontSize.sm, fontFamily: fontFamily.text, marginTop: 2 },
 });

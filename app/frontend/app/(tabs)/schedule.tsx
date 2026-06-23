@@ -183,77 +183,91 @@ export default function Schedule() {
     }
 
     return (
-        <View style={[styles.root, { paddingTop: insets.top }]}>
+        <View style={[styles.root, { paddingTop: insets.top + spacing.xl }]}>
             <View style={styles.header}>
                 <View>
-                    <Text style={styles.eyebrow}>Calendar</Text>
-                    <Text style={styles.h1}>Schedule</Text>
+                    <Text style={styles.eyebrow}>
+                        {now.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })}
+                    </Text>
+                    <Text style={styles.h1}>Today</Text>
                 </View>
+                <View style={styles.avatarPlaceholder} />
             </View>
 
+            {/* Horizontal Date Picker */}
+            <View style={styles.dateSelector}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateSelectorContent}>
+                    {[-3, -2, -1, 0, 1, 2, 3].map((offset) => {
+                        const d = new Date(now);
+                        d.setDate(d.getDate() + offset);
+                        const isSelected = offset === 0;
+                        const dayName = d.toLocaleDateString([], { weekday: "short" });
+                        const dayNum = d.getDate();
+                        return (
+                            <View key={offset} style={[styles.datePill, isSelected && styles.datePillSelected]}>
+                                <Text style={[styles.dateNum, isSelected && styles.dateNumSelected]}>{dayNum}</Text>
+                                <Text style={[styles.dateDay, isSelected && styles.dateDaySelected]}>{dayName}</Text>
+                                {isSelected && <View style={styles.dateDot} />}
+                            </View>
+                        );
+                    })}
+                </ScrollView>
+            </View>
+
+            {/* Timeline View */}
             <ScrollView
-                contentContainerStyle={{ paddingBottom: spacing.xxxl + 80 }}
+                contentContainerStyle={{ paddingBottom: spacing.xxxl + 120, paddingHorizontal: spacing.xl, paddingTop: spacing.xl }}
                 showsVerticalScrollIndicator={false}
             >
-                {/* Today */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Today</Text>
-                    {todaysEvents.length === 0 ? (
-                        <Text style={styles.muted}>Nothing scheduled today.</Text>
-                    ) : (
-                        todaysEvents.map((ev) => (
-                            <EventRow key={ev.id} event={ev} clients={clients} />
-                        ))
-                    )}
-                </View>
-
-                {/* Upcoming */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Upcoming</Text>
-                    {upcomingEvents.length === 0 ? (
-                        <Text style={styles.muted}>No upcoming events.</Text>
-                    ) : (
-                        upcomingEvents.map((ev) => (
-                            <EventRow key={ev.id} event={ev} clients={clients} showDate />
-                        ))
-                    )}
-                </View>
-
-                {/* Active Projects */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Active Projects</Text>
-                    {activeProjects.length === 0 ? (
-                        <Text style={styles.muted}>No active projects.</Text>
-                    ) : (
-                        activeProjects.map((p) => {
-                            const client = clients.find((c) => c.id === p.client_id);
-                            return (
-                                <View key={p.id} style={styles.projectRow}>
-                                    <View style={styles.projectDot} />
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.projectName}>{p.name}</Text>
-                                        <Text style={styles.muted}>
-                                            {client?.name || "—"}
-                                            {p.deadline
-                                                ? ` · Due ${new Date(p.deadline).toLocaleDateString([], {
-                                                      month: "short",
-                                                      day: "numeric",
-                                                  })}`
-                                                : ""}
-                                        </Text>
+                <View style={styles.timelineLine} />
+                
+                {todaysEvents.map((ev, index) => {
+                    const isMeeting = ev.type === "meeting";
+                    return (
+                        <View key={ev.id} style={styles.timelineRow}>
+                            <View style={[styles.timelineNode, isMeeting && styles.timelineNodeActive]} />
+                            
+                            {isMeeting ? (
+                                <View style={styles.timelineCardDark}>
+                                    <View style={styles.cardHeaderRow}>
+                                        <Text style={styles.cardTitleWhite}>{ev.title}</Text>
+                                        <Text style={styles.cardTimeWhite}>{formatTime(ev.start_at)}</Text>
+                                    </View>
+                                    <Text style={styles.cardDescWhite}>Discuss team task for the day</Text>
+                                    <View style={styles.cardFooter}>
+                                        <View style={styles.avatarGroup}>
+                                            <View style={[styles.avatarMini, { zIndex: 3 }]} />
+                                            <View style={[styles.avatarMini, { zIndex: 2, marginLeft: -8 }]} />
+                                            <View style={[styles.avatarMini, { zIndex: 1, marginLeft: -8 }]} />
+                                        </View>
+                                        <View style={styles.checkBtn}>
+                                            <Feather name="check" size={14} color={colors.surfaceDark} />
+                                        </View>
                                     </View>
                                 </View>
-                            );
-                        })
-                    )}
-                </View>
+                            ) : (
+                                <View style={styles.timelineCardLight}>
+                                    <View style={styles.cardHeaderRow}>
+                                        <Text style={styles.cardTitleDark}>{ev.title}</Text>
+                                        <Text style={styles.cardTimeMuted}>{formatTime(ev.start_at)}</Text>
+                                    </View>
+                                    <Text style={styles.cardDescMuted}>Edit icons for team task for next week</Text>
+                                </View>
+                            )}
+                        </View>
+                    );
+                })}
+                
+                {todaysEvents.length === 0 && (
+                    <Text style={[styles.muted, { paddingLeft: 24 }]}>No events today.</Text>
+                )}
             </ScrollView>
 
             <TouchableOpacity
-                style={[styles.fab, { bottom: Math.max(insets.bottom, spacing.md) + 60 }]}
+                style={[styles.headerAddBtn, { position: "absolute", top: insets.top + spacing.xl, right: spacing.xl + 56 }]}
                 onPress={() => setShowAddEvent(true)}
             >
-                <Feather name="plus" size={24} color={colors.onBrand} />
+                <Feather name="plus" size={20} color={colors.onBrand} />
             </TouchableOpacity>
 
             <EventDetailSheet
@@ -378,19 +392,17 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: "row",
         justifyContent: "space-between",
-        alignItems: "flex-end",
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.lg,
-        paddingBottom: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.divider,
+        alignItems: "flex-start",
+        paddingHorizontal: spacing.xl,
+        marginBottom: spacing.xl,
     },
     eyebrow: {
         color: colors.onSurfaceSecondary,
         fontFamily: fontFamily.text,
         fontSize: fontSize.sm,
-        letterSpacing: 1.2,
-        textTransform: "uppercase",
+        fontWeight: "600",
+        letterSpacing: 0.5,
+        marginBottom: 4,
     },
     h1: {
         color: colors.onSurface,
@@ -399,79 +411,186 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         letterSpacing: 0.5,
     },
-    section: {
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.lg,
+    avatarPlaceholder: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: colors.surfaceTertiary,
     },
-    sectionLabel: {
-        color: colors.onSurfaceSecondary,
-        fontFamily: fontFamily.text,
-        fontSize: fontSize.xs,
-        letterSpacing: 1.4,
-        textTransform: "uppercase",
-        marginBottom: spacing.sm,
-        fontWeight: "700",
+    dateSelector: {
+        marginBottom: spacing.md,
     },
-    muted: {
-        color: colors.onSurfaceSecondary,
-        fontSize: fontSize.sm,
-        fontFamily: fontFamily.text,
-        marginTop: 2,
-    },
-    eventRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: spacing.sm,
+    dateSelectorContent: {
+        paddingHorizontal: spacing.xl,
         gap: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.divider,
+        alignItems: "center",
     },
-    timeCol: { width: 64, gap: 2 },
-    eventTime: {
-        color: colors.brand,
-        fontFamily: fontFamily.display,
+    datePill: {
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.sm,
+        borderRadius: 32,
+        width: 48,
+        height: 80,
+    },
+    datePillSelected: {
+        backgroundColor: colors.surfaceDark,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+    dateNum: {
+        color: colors.onSurfaceSecondary,
         fontSize: fontSize.base,
         fontWeight: "700",
+        marginBottom: 2,
     },
-    eventDate: {
+    dateNumSelected: {
+        color: colors.onSurfaceDark,
+    },
+    dateDay: {
         color: colors.onSurfaceSecondary,
         fontSize: fontSize.xs,
+        fontWeight: "600",
+        textTransform: "uppercase",
     },
-    eventBar: { width: 2, height: 28, backgroundColor: colors.border, borderRadius: 1 },
-    eventTitle: { color: colors.onSurface, fontFamily: fontFamily.text, fontSize: fontSize.lg },
-    projectRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: spacing.sm,
-        gap: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.divider,
+    dateDaySelected: {
+        color: colors.onSurfaceDark,
+        opacity: 0.8,
     },
-    projectDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: colors.brand,
+    dateDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: colors.onSurfaceDark,
+        marginTop: 6,
     },
-    projectName: {
-        color: colors.onSurface,
-        fontFamily: fontFamily.text,
-        fontSize: fontSize.lg,
-    },
-    fab: {
+    timelineLine: {
         position: "absolute",
-        right: spacing.lg,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        left: spacing.xl + 6,
+        top: spacing.xl,
+        bottom: 0,
+        width: 2,
+        backgroundColor: colors.surfaceTertiary,
+    },
+    timelineRow: {
+        flexDirection: "row",
+        marginBottom: spacing.xl,
+        paddingLeft: 24,
+        position: "relative",
+    },
+    timelineNode: {
+        position: "absolute",
+        left: -3,
+        top: 2,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        borderWidth: 2,
+        borderColor: colors.onSurfaceSecondary,
+        backgroundColor: colors.surface,
+    },
+    timelineNodeActive: {
+        borderColor: colors.surfaceDark,
+        backgroundColor: colors.surfaceDark,
+        borderWidth: 3,
+    },
+    timelineCardDark: {
+        flex: 1,
+        backgroundColor: colors.surfaceDark,
+        borderRadius: 24,
+        padding: spacing.lg,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+    cardHeaderRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 4,
+    },
+    cardTitleWhite: {
+        color: colors.onSurfaceDark,
+        fontSize: fontSize.lg,
+        fontWeight: "700",
+    },
+    cardTimeWhite: {
+        color: colors.onSurfaceDark,
+        opacity: 0.7,
+        fontSize: fontSize.xs,
+        fontWeight: "600",
+    },
+    cardDescWhite: {
+        color: colors.onSurfaceDark,
+        opacity: 0.7,
+        fontSize: fontSize.sm,
+        lineHeight: 20,
+        marginBottom: spacing.md,
+    },
+    cardFooter: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+    },
+    avatarGroup: {
+        flexDirection: "row",
+    },
+    avatarMini: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: colors.surfaceTertiary,
+        borderWidth: 2,
+        borderColor: colors.surfaceDark,
+    },
+    checkBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: colors.onSurfaceDark,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    timelineCardLight: {
+        flex: 1,
+        paddingTop: 2,
+        paddingHorizontal: spacing.sm,
+    },
+    cardTitleDark: {
+        color: colors.onSurface,
+        fontSize: fontSize.lg,
+        fontWeight: "700",
+    },
+    cardTimeMuted: {
+        color: colors.onSurfaceSecondary,
+        fontSize: fontSize.xs,
+        fontWeight: "600",
+    },
+    cardDescMuted: {
+        color: colors.onSurfaceSecondary,
+        fontSize: fontSize.sm,
+        lineHeight: 20,
+    },
+    muted: { color: colors.onSurfaceSecondary, fontSize: fontSize.sm, fontFamily: fontFamily.text },
+    
+    headerAddBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: colors.brand,
         alignItems: "center",
         justifyContent: "center",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 6,
+    },
+    headerAddBtnText: {
+        color: colors.onBrand,
+        fontWeight: "700",
+        fontSize: fontSize.sm,
     },
     backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
     sheet: { backgroundColor: colors.surfaceSecondary, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, maxHeight: "85%" },
