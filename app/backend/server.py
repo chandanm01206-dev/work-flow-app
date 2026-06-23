@@ -1,33 +1,28 @@
-"""Personal Freelance OS — FastAPI backend.
+"""Personal Freelance OS — FastAPI backend with Supabase.
 
-Single-user, no auth. All collections store UUID `id` strings (not ObjectId).
-All responses exclude Mongo's `_id`.
+Single-user, no auth. All collections use string `id`s (UUIDs).
 """
 
-# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, APIRouter, HTTPException
-# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_client, Client
 import os
 import logging
 import uuid
 from pathlib import Path
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
 from typing import List, Optional, Literal, Dict, Any
-# pyrefly: ignore [missing-import]
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel
 
 ROOT_DIR = Path(__file__).parent
 env_path = ROOT_DIR / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
-mongo_url = os.environ.get("MONGO_URL", "")
-client = AsyncIOMotorClient(mongo_url) if mongo_url else None
-db = client[os.environ.get("DB_NAME", "freelance_os")] if client else None
+supabase_url = os.environ.get("SUPABASE_URL", "")
+supabase_key = os.environ.get("SUPABASE_KEY", "")
+supabase: Client = create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
 
 app = FastAPI(title="Freelance OS API")
 api_router = APIRouter(prefix="/api")
@@ -37,15 +32,8 @@ api_router = APIRouter(prefix="/api")
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-
 def new_id() -> str:
     return str(uuid.uuid4())
-
-
-def strip_id(doc: Dict[str, Any]) -> Dict[str, Any]:
-    if doc and "_id" in doc:
-        doc.pop("_id", None)
-    return doc
 
 
 # ---------- Models ----------
@@ -59,7 +47,7 @@ class TaskIn(BaseModel):
     description: Optional[str] = ""
     category: TaskCategory = "personal"
     priority: TaskPriority = "medium"
-    due_at: Optional[str] = None  # ISO date/time
+    due_at: Optional[str] = None
     status: TaskStatus = "todo"
     project_id: Optional[str] = None
     order: Optional[float] = None
@@ -116,7 +104,7 @@ EventType = Literal["meeting", "deadline", "block"]
 class EventIn(BaseModel):
     title: str
     type: EventType = "meeting"
-    start_at: str  # ISO
+    start_at: str
     end_at: Optional[str] = None
     client_id: Optional[str] = None
     project_id: Optional[str] = None
@@ -156,268 +144,265 @@ class DailyFocus(BaseModel):
 
 # ---------- Tasks ----------
 @api_router.get("/tasks", response_model=List[Task])
-async def list_tasks(status: Optional[TaskStatus] = None, category: Optional[TaskCategory] = None):
-    q: Dict[str, Any] = {}
+def list_tasks(status: Optional[TaskStatus] = None, category: Optional[TaskCategory] = None):
+    query = supabase.table("tasks").select("*").order("order")
     if status:
-        q["status"] = status
+        query = query.eq("status", status)
     if category:
-        q["category"] = category
-    docs = await db.tasks.find(q, {"_id": 0}).sort("order", 1).to_list(5000)
-    return docs
+        query = query.eq("category", category)
+    res = query.execute()
+    return res.data
 
 
 @api_router.post("/tasks", response_model=Task)
-async def create_task(body: TaskIn):
+def create_task(body: TaskIn):
     doc = body.model_dump()
-    # default order = current epoch ms so new items append at the end
     if doc.get("order") is None:
         doc["order"] = datetime.now(timezone.utc).timestamp() * 1000
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
     doc["completed_at"] = None
-    await db.tasks.insert_one(doc.copy())
-    return strip_id(doc)
+    res = supabase.table("tasks").insert(doc).execute()
+    return res.data[0]
 
 
 @api_router.patch("/tasks/{task_id}", response_model=Task)
-async def update_task(task_id: str, body: TaskPatch):
+def update_task(task_id: str, body: TaskPatch):
     patch = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
     if patch.get("status") == "done":
         patch["completed_at"] = now_iso()
     elif "status" in patch and patch["status"] != "done":
         patch["completed_at"] = None
-    res = await db.tasks.find_one_and_update(
-        {"id": task_id}, {"$set": patch}, return_document=True, projection={"_id": 0}
-    )
-    if not res:
+    res = supabase.table("tasks").update(patch).eq("id", task_id).execute()
+    if not res.data:
         raise HTTPException(404, "Task not found")
-    return res
+    return res.data[0]
 
 
 @api_router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str):
-    res = await db.tasks.delete_one({"id": task_id})
-    if not res.deleted_count:
+def delete_task(task_id: str):
+    res = supabase.table("tasks").delete().eq("id", task_id).execute()
+    if not res.data:
         raise HTTPException(404, "Task not found")
     return {"ok": True}
 
 
 class ReorderBody(BaseModel):
-    ids: List[str]  # ordered list, top first
+    ids: List[str]
 
 
 @api_router.post("/tasks/reorder")
-async def reorder_tasks(body: ReorderBody):
+def reorder_tasks(body: ReorderBody):
     for idx, tid in enumerate(body.ids):
-        await db.tasks.update_one({"id": tid}, {"$set": {"order": float(idx)}})
+        supabase.table("tasks").update({"order": float(idx)}).eq("id", tid).execute()
     return {"ok": True}
 
 
 # ---------- Clients ----------
 @api_router.get("/clients", response_model=List[ClientOut])
-async def list_clients():
-    return await db.clients.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+def list_clients():
+    res = supabase.table("clients").select("*").order("created_at", desc=True).execute()
+    return res.data
 
 
 @api_router.post("/clients", response_model=ClientOut)
-async def create_client(body: ClientIn):
+def create_client(body: ClientIn):
     doc = body.model_dump()
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
-    await db.clients.insert_one(doc.copy())
-    return strip_id(doc)
+    res = supabase.table("clients").insert(doc).execute()
+    return res.data[0]
 
 
 @api_router.patch("/clients/{cid}", response_model=ClientOut)
-async def update_client(cid: str, body: ClientIn):
-    res = await db.clients.find_one_and_update(
-        {"id": cid}, {"$set": body.model_dump()}, return_document=True, projection={"_id": 0}
-    )
-    if not res:
+def update_client(cid: str, body: ClientIn):
+    res = supabase.table("clients").update(body.model_dump()).eq("id", cid).execute()
+    if not res.data:
         raise HTTPException(404, "Client not found")
-    return res
+    return res.data[0]
 
 
 @api_router.delete("/clients/{cid}")
-async def delete_client(cid: str):
-    await db.clients.delete_one({"id": cid})
-    await db.projects.delete_many({"client_id": cid})
+def delete_client(cid: str):
+    supabase.table("clients").delete().eq("id", cid).execute()
     return {"ok": True}
 
 
 # ---------- Projects ----------
 @api_router.get("/projects", response_model=List[ProjectOut])
-async def list_projects(client_id: Optional[str] = None):
-    q: Dict[str, Any] = {}
+def list_projects(client_id: Optional[str] = None):
+    query = supabase.table("projects").select("*").order("created_at", desc=True)
     if client_id:
-        q["client_id"] = client_id
-    return await db.projects.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+        query = query.eq("client_id", client_id)
+    res = query.execute()
+    return res.data
 
 
 @api_router.post("/projects", response_model=ProjectOut)
-async def create_project(body: ProjectIn):
+def create_project(body: ProjectIn):
     doc = body.model_dump()
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
-    await db.projects.insert_one(doc.copy())
-    return strip_id(doc)
+    res = supabase.table("projects").insert(doc).execute()
+    return res.data[0]
 
 
 @api_router.patch("/projects/{pid}", response_model=ProjectOut)
-async def update_project(pid: str, body: ProjectIn):
-    res = await db.projects.find_one_and_update(
-        {"id": pid}, {"$set": body.model_dump()}, return_document=True, projection={"_id": 0}
-    )
-    if not res:
+def update_project(pid: str, body: ProjectIn):
+    res = supabase.table("projects").update(body.model_dump()).eq("id", pid).execute()
+    if not res.data:
         raise HTTPException(404, "Project not found")
-    return res
+    return res.data[0]
 
 
 @api_router.delete("/projects/{pid}")
-async def delete_project(pid: str):
-    await db.projects.delete_one({"id": pid})
+def delete_project(pid: str):
+    supabase.table("projects").delete().eq("id", pid).execute()
     return {"ok": True}
 
 
 # ---------- Events ----------
 @api_router.get("/events", response_model=List[EventOut])
-async def list_events():
-    return await db.events.find({}, {"_id": 0}).sort("start_at", 1).to_list(5000)
+def list_events():
+    res = supabase.table("events").select("*").order("start_at").execute()
+    return res.data
 
 
 @api_router.post("/events", response_model=EventOut)
-async def create_event(body: EventIn):
+def create_event(body: EventIn):
     doc = body.model_dump()
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
-    await db.events.insert_one(doc.copy())
-    return strip_id(doc)
+    res = supabase.table("events").insert(doc).execute()
+    return res.data[0]
 
 
 @api_router.patch("/events/{eid}", response_model=EventOut)
-async def update_event(eid: str, body: EventIn):
-    res = await db.events.find_one_and_update(
-        {"id": eid}, {"$set": body.model_dump()}, return_document=True, projection={"_id": 0}
-    )
-    if not res:
+def update_event(eid: str, body: EventIn):
+    res = supabase.table("events").update(body.model_dump()).eq("id", eid).execute()
+    if not res.data:
         raise HTTPException(404, "Event not found")
-    return res
+    return res.data[0]
 
 
 @api_router.delete("/events/{eid}")
-async def delete_event(eid: str):
-    await db.events.delete_one({"id": eid})
+def delete_event(eid: str):
+    supabase.table("events").delete().eq("id", eid).execute()
     return {"ok": True}
 
 
 # ---------- Habits ----------
 @api_router.get("/habits", response_model=List[HabitOut])
-async def list_habits():
-    return await db.habits.find({}, {"_id": 0}).sort("created_at", 1).to_list(50)
+def list_habits():
+    res = supabase.table("habits").select("*").order("created_at").execute()
+    return res.data
 
 
 @api_router.post("/habits", response_model=HabitOut)
-async def create_habit(body: HabitIn):
-    count = await db.habits.count_documents({})
-    if count >= 7:
+def create_habit(body: HabitIn):
+    count_res = supabase.table("habits").select("id", count="exact").execute()
+    if count_res.count and count_res.count >= 7:
         raise HTTPException(400, "Max 7 habits — keep the list short on purpose.")
     doc = body.model_dump()
     doc["id"] = new_id()
     doc["created_at"] = now_iso()
-    await db.habits.insert_one(doc.copy())
-    return strip_id(doc)
+    res = supabase.table("habits").insert(doc).execute()
+    return res.data[0]
 
 
 @api_router.patch("/habits/{hid}", response_model=HabitOut)
-async def update_habit(hid: str, body: HabitIn):
-    res = await db.habits.find_one_and_update(
-        {"id": hid}, {"$set": body.model_dump()}, return_document=True, projection={"_id": 0}
-    )
-    if not res:
+def update_habit(hid: str, body: HabitIn):
+    res = supabase.table("habits").update(body.model_dump()).eq("id", hid).execute()
+    if not res.data:
         raise HTTPException(404, "Habit not found")
-    return res
+    return res.data[0]
 
 
 @api_router.delete("/habits/{hid}")
-async def delete_habit(hid: str):
-    await db.habits.delete_one({"id": hid})
-    await db.habit_logs.delete_many({"habit_id": hid})
+def delete_habit(hid: str):
+    supabase.table("habits").delete().eq("id", hid).execute()
     return {"ok": True}
 
 
 @api_router.get("/habit-logs", response_model=List[HabitLogOut])
-async def list_habit_logs(start: Optional[str] = None, end: Optional[str] = None):
-    q: Dict[str, Any] = {}
-    if start or end:
-        q["date"] = {}
-        if start:
-            q["date"]["$gte"] = start
-        if end:
-            q["date"]["$lte"] = end
-    return await db.habit_logs.find(q, {"_id": 0}).to_list(20000)
+def list_habit_logs(start: Optional[str] = None, end: Optional[str] = None):
+    query = supabase.table("habit_logs").select("*")
+    if start:
+        query = query.gte("date", start)
+    if end:
+        query = query.lte("date", end)
+    res = query.execute()
+    return res.data
 
 
 @api_router.post("/habit-logs/toggle", response_model=HabitLogOut)
-async def toggle_habit_log(body: HabitLogIn):
-    existing = await db.habit_logs.find_one(
-        {"habit_id": body.habit_id, "date": body.date}, {"_id": 0}
-    )
-    if existing:
-        if existing["done"]:
-            await db.habit_logs.delete_one({"id": existing["id"]})
-            existing["done"] = False
-            return existing
-        await db.habit_logs.update_one({"id": existing["id"]}, {"$set": {"done": True}})
-        existing["done"] = True
-        return existing
+def toggle_habit_log(body: HabitLogIn):
+    existing = supabase.table("habit_logs").select("*").eq("habit_id", body.habit_id).eq("date", body.date).execute()
+    if existing.data:
+        log = existing.data[0]
+        if log["done"]:
+            supabase.table("habit_logs").delete().eq("id", log["id"]).execute()
+            log["done"] = False
+            return log
+        supabase.table("habit_logs").update({"done": True}).eq("id", log["id"]).execute()
+        log["done"] = True
+        return log
     doc = body.model_dump()
     doc["id"] = new_id()
     doc["done"] = True
-    await db.habit_logs.insert_one(doc.copy())
-    return strip_id(doc)
+    res = supabase.table("habit_logs").insert(doc).execute()
+    return res.data[0]
 
 
 # ---------- Daily Focus ----------
 @api_router.get("/daily-focus/{day}", response_model=DailyFocus)
-async def get_focus(day: str):
-    doc = await db.daily_focus.find_one({"date": day}, {"_id": 0})
-    return doc or {"date": day, "text": ""}
+def get_focus(day: str):
+    res = supabase.table("daily_focus").select("*").eq("date", day).execute()
+    if res.data:
+        return res.data[0]
+    return {"date": day, "text": ""}
 
 
 @api_router.put("/daily-focus/{day}", response_model=DailyFocus)
-async def set_focus(day: str, body: DailyFocus):
+def set_focus(day: str, body: DailyFocus):
     payload = {"date": day, "text": body.text}
-    await db.daily_focus.update_one({"date": day}, {"$set": payload}, upsert=True)
+    supabase.table("daily_focus").upsert(payload).execute()
     return payload
 
 
 # ---------- Export / Import ----------
 @api_router.get("/export")
-async def export_all():
+def export_all():
     collections = ["tasks", "clients", "projects", "events", "habits", "habit_logs", "daily_focus"]
     out: Dict[str, Any] = {"exported_at": now_iso(), "version": 1}
     for c in collections:
-        out[c] = await db[c].find({}, {"_id": 0}).to_list(50000)
+        res = supabase.table(c).select("*").execute()
+        out[c] = res.data
     return out
 
 
 @api_router.post("/import")
-async def import_all(payload: Dict[str, Any]):
+def import_all(payload: Dict[str, Any]):
     collections = ["tasks", "clients", "projects", "events", "habits", "habit_logs", "daily_focus"]
     for c in collections:
         if c in payload and isinstance(payload[c], list):
-            await db[c].delete_many({})
+            # In Supabase, deleting all records safely usually means deleting where id != null or using TRUNCATE.
+            # We'll fetch all and delete if possible, or just ignore for now.
+            # Warning: A generic delete without a filter might fail, we should filter by not null.
+            if c == "daily_focus":
+                supabase.table(c).delete().neq("date", "non_existent").execute()
+            else:
+                supabase.table(c).delete().neq("id", "non_existent").execute()
             if payload[c]:
-                await db[c].insert_many([{**doc} for doc in payload[c]])
+                supabase.table(c).insert(payload[c]).execute()
     return {"ok": True}
 
 
 @api_router.get("/")
-async def root():
+def root():
     return {"app": "Freelance OS", "ok": True}
 
 
-# Middleware must be added before include_router so it wraps all routes
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -431,7 +416,4 @@ app.include_router(api_router)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# No shutdown event needed for sync Supabase client
