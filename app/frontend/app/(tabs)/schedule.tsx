@@ -124,9 +124,6 @@ const dpS = StyleSheet.create({
     confirmBtn: {flex:1,padding:12,borderRadius:8,backgroundColor:"#FF5722",alignItems:"center"},
     confirmTxt: {color:"#FFFFFF",fontWeight:"700"},
 });
-import { colors, fontFamily, fontSize, radius, spacing } from "@/src/theme";
-import type { CalendarEvent, Client, Project } from "@/src/types";
-import { formatTime, isSameDay } from "@/src/utils/date";
 
 export default function Schedule() {
     const insets = useSafeAreaInsets();

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import { colors, fontFamily } from "@/src/theme";
@@ -36,10 +37,11 @@ export default function LoginScreen() {
         >
             <View style={styles.card}>
                 <View style={styles.header}>
-                    <View style={styles.iconBox}>
-                        <Feather name="layers" size={32} color={colors.onBrand} />
-                    </View>
-                    <Text style={styles.title}>Too do</Text>
+                    <Image
+                        source={require("../assets/images/logo.jpg")}
+                        style={styles.logo}
+                        resizeMode="contain"
+                    />
                     <Text style={styles.subtitle}>{isRegistering ? "Create an account" : "Welcome back"}</Text>
                 </View>
 
@@ -109,12 +111,12 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
     },
-    title: {
-        fontFamily: fontFamily.displayBold,
-        fontSize: 32,
-        color: colors.onSurface,
-        textAlign: "center",
-        marginBottom: 8,
+    logo: {
+        width: 180,
+        height: 90,
+        alignSelf: "center",
+        marginBottom: 16,
+        borderRadius: 12,
     },
     subtitle: {
         fontFamily: fontFamily.text,
